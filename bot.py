@@ -12,18 +12,14 @@ def get_price():
 
     for item in root.findall(".//ModelFiyat"):
         model = item.find("Model")
+        yil = item.find("ModelYili")
 
-        if model is not None and model.text.strip() == TARGET_MODEL:
+        if model is not None and yil is not None:
+            if model.text.strip() == TARGET_MODEL and yil.text == "2026":
 
-            # Kampanyalı fiyat
-            kampanya = item.find("KampanyaliFiyati2")
-            if kampanya is not None and kampanya.text:
-                return f"{model.text} → {kampanya.text}"
-
-            # fallback
-            otv = item.find("OTVTesvikli1")
-            if otv is not None and otv.text:
-                return f"{model.text} → {otv.text}"
+                kampanya = item.find("KampanyaliFiyati2")
+                if kampanya is not None and kampanya.text:
+                    return f"{model.text} → {kampanya.text}"
 
     return None
 
