@@ -1,73 +1,64 @@
 import requests
-from bs4 import BeautifulSoup
+import xml.etree.ElementTree as ET
 import time
+import os
 
-# Telegram Bilgileri
-TOKEN = "8768272603:AAFTYPyzQQGnCGR1CRMGw58tEN_nQc-9FSE"
-CHAT_ID = "8421945805"
-URL = "https://www.sahibinden.com/oto360/sifir-araclar/toyota-corolla-cross-fiyat-listesi"
+URL = "https://turkiye.toyota.com.tr/middle/fiyat-listesi/fiyat_v3.xml"
 
-def send_telegram_msg(msg):
-    try:
-        url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-        requests.post(url, data={"chat_id": CHAT_ID, "text": msg[:4000]})
-    except Exception as e:
-        print(f"Telegram hatası: {e}")
+TARGET_MODEL = "1.8 Hybrid Flame X-Pack e-CVT"
 
-def get_sahibinden_price():
-    # Sahibinden bot korumasını geçmek için gerçek bir bilgisayar gibi davranıyoruz
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-        "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
-        "Referer": "https://www.google.com/"
-    }
-    
-    try:
-        response = requests.get(URL, headers=headers, timeout=15)
-        
-        # 403 hatası, Sahibinden'in Railway'i engellediğini gösterir
-        if response.status_code == 403:
-            return "HATA 403: Sahibinden bot koruması (Cloudflare) Railway'i engelledi.", None
-        elif response.status_code != 200:
-            return f"HATA: Sunucu {response.status_code} kodu döndürdü.", None
+def get_price():
+    response = requests.get(URL)
+    root = ET.fromstring(response.content)
 
-        # Sayfa başarıyla açıldıysa içeriği analiz et
-        soup = BeautifulSoup(response.text, "html.parser")
-        
-        # Sayfadaki tüm metin bloklarını tarıyoruz
-        for element in soup.find_all(['tr', 'li', 'div', 'span', 'p']):
-            text = element.get_text(strip=True).replace("\n", " ").replace("\t", " ")
-            text_lower = text.lower()
-            
-            # İçinde "Flame" ve fiyat belirten "TL" veya "₺" geçen ilk mantıklı uzunluktaki satırı al
-            if "flame" in text_lower and ("tl" in text_lower or "₺" in text_lower):
-                if len(text) < 150: # Tüm sayfayı tek parça okumasını önlemek için
-                    return text, text
+    for item in root.findall(".//ModelFiyat"):
+        model = item.find("Model")
+        yil = item.find("ModelYili")
+        price = item.find("KampanyaliFiyati2")
 
-        return "HATA: Sayfa açıldı ama 'Flame' kelimesi içeren fiyat bulunamadı.", None
+        if model is None or yil is None:
+            continue
 
-    except Exception as e:
-        return f"HATA: Sistemsel sorun: {e}", None
+        model_text = model.text.strip()
+        yil_text = yil.text.strip()
 
-last_saved_price = None
+        if model_text == TARGET_MODEL and yil_text == "2026":
+            if price is not None and price.text:
+                return price.text.strip()
 
-print("⚓️ Sahibinden Tarayıcı Botu Çalıştırıldı...")
+    return None
+
+
+def send_telegram(msg):
+    token = os.getenv("BOT_TOKEN")
+    chat_id = os.getenv("CHAT_ID")
+
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+
+    requests.post(url, data={
+        "chat_id": chat_id,
+        "text": msg
+    })
+
+
+last_price = None
+
+# 🔥 TEST MESAJI
+send_telegram("Toyota bot aktif 🚀")
 
 while True:
-    status_msg, current_price = get_sahibinden_price()
-    ts = time.strftime("%H:%M:%S")
+    try:
+        price = get_price()
+        print("Fiyat:", price)
 
-    if current_price:
-        print(f"[{ts}] BAŞARILI: {current_price}")
-        if last_saved_price != current_price:
-            send_telegram_msg(f"✅ Sahibinden Fiyatı Yakalandı!\n🚗 {current_price}")
-            last_saved_price = current_price
-    else:
-        print(f"[{ts}] {status_msg}")
-        # Hata durumunu Telegram'a sadece bir kez gönder
-        if last_saved_price != status_msg:
-            send_telegram_msg(f"❌ Sahibinden Bot Raporu:\n{status_msg}")
-            last_saved_price = status_msg
+        if price and last_price and price != last_price:
+            msg = f"🚨 Toyota fiyat değişti!\nEski: {last_price}\nYeni: {price}"
+            print(msg)
+            send_telegram(msg)
 
-    time.sleep(600) # 10 dakikada bir kontrol
+        last_price = price
+        time.sleep(300)
+
+    except Exception as e:
+        print("Hata:", e)
+        time.sleep(60)
