@@ -1,64 +1,52 @@
-import asyncio
-from playwright.async_api import async_playwright
-import time
-import os
 import requests
+import xml.etree.ElementTree as ET
+import time
 
-URL = "https://turkiye.toyota.com.tr/middle/fiyat-listesi/"
+# Toyota Backend XML Linki
+URL = "https://turkiye.toyota.com.tr/middle/fiyat-listesi/fiyat_v3.xml"
 
-async def get_price():
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page()
+def get_price():
+    headers = {"User-Agent": "Mozilla/5.0"}
+    response = requests.get(URL, headers=headers)
+    root = ET.fromstring(response.content)
 
-        await page.goto(URL)
+    found_any = False
+    
+    for item in root.findall(".//ModelFiyat"):
+        model = item.findtext("Model", "").strip()
+        yil = item.findtext("ModelYili", "").strip()
+        fiyat = item.findtext("KampanyaliFiyati2", "").strip()
 
-        # cookie kabul
-        try:
-            await page.click("text=Kabul et", timeout=3000)
-        except:
-            pass
+        # Debug: En azından Flame geçen modelleri logda görelim ki neyi yanlış arıyoruz anlayalım
+        if "Flame" in model:
+            found_any = True
+            # print(f"DEBUG: Bulunan -> {model} ({yil})") # Gerekirse açabilirsin
 
-        # Corolla Cross seç
-        await page.click("text=Corolla Cross Hybrid")
+        # HEDEF FİLTRE: "Hybrid", "Flame" ve "2026" (Veya 2025 ise ona göre güncelle)
+        if "Hybrid" in model and "Flame" in model and yil == "2026":
+            if fiyat and fiyat != "0": # Fiyat etiketi doluysa döndür
+                return f"{model} ({yil}) -> {fiyat}"
 
-        await page.wait_for_timeout(3000)
-
-        # fiyatı çek
-        content = await page.content()
-
-        await browser.close()
-
-        # basit parsing
-        if "2.534.000 TL" in content:
-            return "2.534.000 TL"
-
-    return None
-
-
-def send_telegram(msg):
-    token = os.getenv("BOT_TOKEN")
-    chat_id = os.getenv("CHAT_ID")
-
-    requests.post(
-        f"https://api.telegram.org/bot{token}/sendMessage",
-        data={"chat_id": chat_id, "text": msg}
-    )
-
+    if not found_any:
+        return "Hata: Listede 'Flame' içeren hiçbir model bulunamadı."
+    
+    return "Filtreye uygun model bulundu ama fiyatı boş görünüyor."
 
 last_price = None
 
 while True:
     try:
-        price = asyncio.run(get_price())
-        print("Fiyat:", price)
+        current_time = time.strftime("%H:%M:%S")
+        price = get_price()
+        print(f"[{current_time}] {price}")
 
-        if price and last_price and price != last_price:
-            send_telegram(f"🚨 Fiyat değişti: {price}")
+        if last_price and price != last_price and "->" in str(price):
+            print("🚨 FİYAT DEĞİŞTİ! (Alarm Çalıyor)")
+            # Buraya ilerde Telegram kodu gelecek
 
         last_price = price
-        time.sleep(300)
+        time.sleep(300) # 5 dakikada bir kontrol
 
     except Exception as e:
-        print("Hata:", e)
+        print(f"Hata oluştu: {e}")
         time.sleep(60)
