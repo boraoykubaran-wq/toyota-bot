@@ -1,64 +1,39 @@
 import requests
-import xml.etree.ElementTree as ET
+from bs4 import BeautifulSoup
 import time
 
-# 🔑 TELEGRAM BİLGİLERİN
+# Telegram Bilgileri
 TOKEN = "8768272603:AAFTYPyzQQGnCGR1CRMGw58tEN_nQc-9FSE"
 CHAT_ID = "8421945805"
-URL = "https://turkiye.toyota.com.tr/middle/fiyat-listesi/fiyat_v3.xml"
+URL = "https://www.sahibinden.com/oto360/sifir-araclar/toyota-corolla-cross-fiyat-listesi"
 
 def send_telegram_msg(msg):
     try:
         url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-        data = {"chat_id": CHAT_ID, "text": msg}
-        requests.post(url, data=data)
+        requests.post(url, data={"chat_id": CHAT_ID, "text": msg[:4000]})
     except Exception as e:
         print(f"Telegram hatası: {e}")
 
-def get_toyota_price():
-    headers = {"User-Agent": "Mozilla/5.0"}
+def get_sahibinden_price():
+    # Sahibinden bot korumasını geçmek için gerçek bir bilgisayar gibi davranıyoruz
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Referer": "https://www.google.com/"
+    }
+    
     try:
-        response = requests.get(URL, headers=headers)
-        response.encoding = 'utf-8'
-        root = ET.fromstring(response.content)
-
-        print("\n--- [TARAMA BAŞLADI] ---")
+        response = requests.get(URL, headers=headers, timeout=15)
         
-        for item in root.findall(".//ModelFiyat"):
-            # XML'deki hiyerarşiye tam uyum:
-            govde = (item.findtext("Govde") or "").strip()       # "COROLLA CROSS"
-            model_detay = (item.findtext("Model") or "").strip() # "1.8 Hybrid Flame e-CVT"
-            yil = (item.findtext("ModelYili") or "").strip()     # "2026"
-            fiyat = (item.findtext("KampanyaliFiyati2") or "").strip() # "2534000 TL"
+        # 403 hatası, Sahibinden'in Railway'i engellediğini gösterir
+        if response.status_code == 403:
+            return "HATA 403: Sahibinden bot koruması (Cloudflare) Railway'i engelledi.", None
+        elif response.status_code != 200:
+            return f"HATA: Sunucu {response.status_code} kodu döndürdü.", None
 
-            # 🎯 KRİTİK FİLTRE:
-            # Gövde içinde "CROSS" ve model içinde "FLAME" geçmeli
-            if "CROSS" in govde.upper() and "FLAME" in model_detay.upper():
-                if yil == "2026" and fiyat:
-                    full_name = f"{govde} {model_detay}"
-                    return full_name, fiyat
+        # Sayfa başarıyla açıldıysa içeriği analiz et
+        soup = BeautifulSoup(response.text, "html.parser")
         
-        return None, None
-    except Exception as e:
-        print(f"Hata: {e}")
-        return None, None
-
-last_saved_price = None
-
-while True:
-    model_adi, current_price = get_toyota_price()
-    ts = time.strftime("%H:%M:%S")
-
-    if current_price:
-        print(f"[{ts}] BAŞARILI: {model_adi} -> {current_price}")
-        
-        # Fiyat ilk kez çekiliyorsa veya değişmişse mesaj at
-        if last_saved_price is None or current_price != last_saved_price:
-            msg = f"✅ Fiyat Yakalandı!\n🚗 {model_adi} (2026)\n💰 Güncel: {current_price}"
-            send_telegram_msg(msg)
-            last_saved_price = current_price
-    else:
-        print(f"[{ts}] Model XML içinde bulunamadı. Filtreleri kontrol et.")
-
-    # Railway'de logları takip etmek için 15 dakikada bir (900 sn)
-    time.sleep(900)
+        # Sayfadaki tüm metin bloklarını tarıyoruz
+        for
