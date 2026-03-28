@@ -9,19 +9,15 @@ def get_price():
     root = ET.fromstring(response.content)
 
     for item in root.findall(".//ModelFiyat"):
-        model = item.find("Model")
-        yil = item.find("ModelYili")
-        price = item.find("KampanyaliFiyati2")
+        text = "".join(item.itertext())
 
-        if model is not None and yil is not None and price is not None:
+        # 🔥 direkt metin içinde ara
+        if "Hybrid Flame X-Pack" in text and "2026" in text:
 
-            model_text = model.text.strip()
-
-            # 🔥 ESNEK ARAMA
-            if "Hybrid Flame" in model_text and yil.text == "2026":
-
-                if price.text:
-                    return f"{model_text} → {price.text}"
+            # fiyatı yakala
+            for child in item:
+                if child.tag == "KampanyaliFiyati2" and child.text:
+                    return f"{text.strip()} → {child.text}"
 
     return None
 
