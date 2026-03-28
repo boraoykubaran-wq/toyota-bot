@@ -9,30 +9,29 @@ def get_price():
     root = ET.fromstring(response.content)
 
     for item in root.findall(".//ModelFiyat"):
-        text = "".join(item.itertext())
+        model = item.find("Model")
+        yil = item.find("ModelYili")
+        fiyat = item.find("KampanyaliFiyati2")
 
-        # 🔥 direkt metin içinde ara
-        if "Hybrid Flame X-Pack" in text and "2026" in text:
+        if model is None or yil is None:
+            continue
 
-            # fiyatı yakala
-            for child in item:
-                if child.tag == "KampanyaliFiyati2" and child.text:
-                    return f"{text.strip()} → {child.text}"
+        model_text = model.text.strip()
+        yil_text = yil.text.strip()
+
+        # 🎯 DOĞRU FİLTRE
+        if "Hybrid Flame X-Pack" in model_text and yil_text == "2026":
+
+            if fiyat is not None and fiyat.text:
+                return f"{model_text} → {fiyat.text}"
 
     return None
 
-
-last_price = None
 
 while True:
     try:
         price = get_price()
         print("Bulunan fiyat:", price)
-
-        if last_price and price != last_price:
-            print("🚨 FİYAT DEĞİŞTİ!")
-
-        last_price = price
         time.sleep(300)
 
     except Exception as e:
