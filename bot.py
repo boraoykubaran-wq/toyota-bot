@@ -22,17 +22,21 @@ def get_toyota_price():
         response.encoding = 'utf-8'
         root = ET.fromstring(response.content)
 
+        print("\n--- [TARAMA BAŞLADI] ---")
+        
         for item in root.findall(".//ModelFiyat"):
-            # XML Yapısına göre tam eşleme
-            govde = (item.findtext("Govde") or "").strip()   # COROLLA CROSS
-            model_tipi = (item.findtext("Model") or "").strip() # 1.8 Hybrid Flame e-CVT
-            yil = (item.findtext("ModelYili") or "").strip()    # 2026
-            fiyat = (item.findtext("KampanyaliFiyati2") or "").strip() # 2534000 TL
+            # XML'deki hiyerarşiye tam uyum:
+            govde = (item.findtext("Govde") or "").strip()       # "COROLLA CROSS"
+            model_detay = (item.findtext("Model") or "").strip() # "1.8 Hybrid Flame e-CVT"
+            yil = (item.findtext("ModelYili") or "").strip()     # "2026"
+            fiyat = (item.findtext("KampanyaliFiyati2") or "").strip() # "2534000 TL"
 
-            # 🎯 FİLTRE: Govde "COROLLA CROSS" olacak ve Model içinde "Flame" geçecek
-            if "CROSS" in govde.upper() and "FLAME" in model_tipi.upper():
+            # 🎯 KRİTİK FİLTRE:
+            # Gövde içinde "CROSS" ve model içinde "FLAME" geçmeli
+            if "CROSS" in govde.upper() and "FLAME" in model_detay.upper():
                 if yil == "2026" and fiyat:
-                    return f"{govde} {model_tipi} ({yil})", fiyat
+                    full_name = f"{govde} {model_detay}"
+                    return full_name, fiyat
         
         return None, None
     except Exception as e:
@@ -42,18 +46,19 @@ def get_toyota_price():
 last_saved_price = None
 
 while True:
-    full_name, current_price = get_toyota_price()
+    model_adi, current_price = get_toyota_price()
     ts = time.strftime("%H:%M:%S")
 
     if current_price:
-        print(f"[{ts}] BAŞARILI: {full_name} -> {current_price}")
+        print(f"[{ts}] BAŞARILI: {model_adi} -> {current_price}")
         
+        # Fiyat ilk kez çekiliyorsa veya değişmişse mesaj at
         if last_saved_price is None or current_price != last_saved_price:
-            msg = f"✅ Fiyat Yakalandı!\n🚗 {full_name}\n💰 Kampanyalı: {current_price}"
+            msg = f"✅ Fiyat Yakalandı!\n🚗 {model_adi} (2026)\n💰 Güncel: {current_price}"
             send_telegram_msg(msg)
             last_saved_price = current_price
     else:
-        print(f"[{ts}] Model XML içinde bulunamadı.")
+        print(f"[{ts}] Model XML içinde bulunamadı. Filtreleri kontrol et.")
 
-    # 1 saatte bir kontrol (3600 sn)
-    time.sleep(3600)
+    # Railway'de logları takip etmek için 15 dakikada bir (900 sn)
+    time.sleep(900)
