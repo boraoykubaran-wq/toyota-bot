@@ -10,11 +10,18 @@ def get_price():
 
     for item in root.findall(".//ModelFiyat"):
         model = item.find("Model")
-        price = item.find("KampanyaliFiyati2")
 
-        if model is not None and price is not None:
-            if "Flame" in model.text and "Hybrid" in model.text:
-                return f"{model.text} → {price.text}"
+        if model is not None and "Hybrid Flame" in model.text:
+
+            # önce kampanyalı fiyat
+            kampanya = item.find("KampanyaliFiyati2")
+            if kampanya is not None and kampanya.text:
+                return f"{model.text} → {kampanya.text}"
+
+            # yoksa ÖTV'li fiyat
+            otv = item.find("OTVTesvikli1")
+            if otv is not None and otv.text:
+                return f"{model.text} → {otv.text}"
 
     return None
 
@@ -24,7 +31,7 @@ last_price = None
 while True:
     try:
         price = get_price()
-        print("Bulunan:", price)
+        print("Bulunan fiyat:", price)
 
         if last_price and price != last_price:
             print("🚨 FİYAT DEĞİŞTİ!")
