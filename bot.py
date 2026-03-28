@@ -1,52 +1,76 @@
-import requests
-import xml.etree.ElementTree as ET
+import os
 import time
+import requests
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
-# Toyota Backend XML Linki
-URL = "https://turkiye.toyota.com.tr/middle/fiyat-listesi/fiyat_v3.xml"
+# 🔑 BİLGİLERİN
+TOKEN = "8768272603:AAFTYPyzQQGnCGR1CRMGw58tEN_nQc-9FSE"
+CHAT_ID = "8421945805"
+URL = "https://turkiye.toyota.com.tr/middle/fiyat-listesi/"
+
+def send_message(msg):
+    try:
+        url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+        requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
+    except: pass
 
 def get_price():
-    headers = {"User-Agent": "Mozilla/5.0"}
-    response = requests.get(URL, headers=headers)
-    root = ET.fromstring(response.content)
-
-    found_any = False
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
     
-    for item in root.findall(".//ModelFiyat"):
-        model = item.findtext("Model", "").strip()
-        yil = item.findtext("ModelYili", "").strip()
-        fiyat = item.findtext("KampanyaliFiyati2", "").strip()
+    # Railway'de çalışması için gerekli sürücü kurulumu
+    service = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+    wait = WebDriverWait(driver, 20)
 
-        # Debug: En azından Flame geçen modelleri logda görelim ki neyi yanlış arıyoruz anlayalım
-        if "Flame" in model:
-            found_any = True
-            # print(f"DEBUG: Bulunan -> {model} ({yil})") # Gerekirse açabilirsin
+    try:
+        driver.get(URL)
+        time.sleep(5)
 
-        # HEDEF FİLTRE: "Hybrid", "Flame" ve "2026" (Veya 2025 ise ona göre güncelle)
-        if "Hybrid" in model and "Flame" in model and yil == "2026":
-            if fiyat and fiyat != "0": # Fiyat etiketi doluysa döndür
-                return f"{model} ({yil}) -> {fiyat}"
+        # Çerezleri Kabul Et
+        try:
+            btn = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(.,'Tümüne izin ver')]")))
+            btn.click()
+        except: pass
 
-    if not found_any:
-        return "Hata: Listede 'Flame' içeren hiçbir model bulunamadı."
-    
-    return "Filtreye uygun model bulundu ama fiyatı boş görünüyor."
+        # Corolla Cross Linkine Git
+        links = driver.find_elements(By.TAG_NAME, "a")
+        target_link = next((l.get_attribute("href") for l in links if l.get_attribute("href") and "corolla-cross" in l.get_attribute("href").lower()), None)
 
-last_price = None
+        if not target_link: return None
+
+        driver.get(target_link)
+        time.sleep(7)
+
+        # Fiyatı Ara (Özellikle Flame ve 2026 içeren satırı bulalım)
+        body_text = driver.find_element(By.TAG_NAME, "body").text
+        for line in body_text.split("\n"):
+            if "Flame" in line and ("2.534" in line or "TL" in line):
+                return line
+        return None
+    finally:
+        driver.quit()
+
+# 🔁 ANA DÖNGÜ
+send_message("⚓️ Kaptan, Selenium Botu Railway'de göreve başladı!")
+old_price = None
 
 while True:
-    try:
-        current_time = time.strftime("%H:%M:%S")
-        price = get_price()
-        print(f"[{current_time}] {price}")
-
-        if last_price and price != last_price and "->" in str(price):
-            print("🚨 FİYAT DEĞİŞTİ! (Alarm Çalıyor)")
-            # Buraya ilerde Telegram kodu gelecek
-
-        last_price = price
-        time.sleep(300) # 5 dakikada bir kontrol
-
-    except Exception as e:
-        print(f"Hata oluştu: {e}")
-        time.sleep(60)
+    print("Fiyat kontrol ediliyor...")
+    new_price = get_price()
+    
+    if new_price and new_price != old_price:
+        send_message(f"🚗 Corolla Cross Güncelleme:\n💰 {new_price}")
+        old_price = new_price
+        print(f"Yeni Fiyat: {new_price}")
+    
+    time.sleep(1800) # 30 dakikada bir kontrol
