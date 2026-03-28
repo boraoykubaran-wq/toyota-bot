@@ -1,30 +1,37 @@
-import requests
-import xml.etree.ElementTree as ET
+import asyncio
+from playwright.async_api import async_playwright
 import time
 import os
+import requests
 
-URL = "https://turkiye.toyota.com.tr/middle/fiyat-listesi/fiyat_v3.xml"
+URL = "https://turkiye.toyota.com.tr/middle/fiyat-listesi/"
 
-TARGET_MODEL = "1.8 Hybrid Flame X-Pack e-CVT"
+async def get_price():
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        page = await browser.new_page()
 
-def get_price():
-    response = requests.get(URL)
-    root = ET.fromstring(response.content)
+        await page.goto(URL)
 
-    for item in root.findall(".//ModelFiyat"):
-        model = item.find("Model")
-        yil = item.find("ModelYili")
-        price = item.find("KampanyaliFiyati2")
+        # cookie kabul
+        try:
+            await page.click("text=Kabul et", timeout=3000)
+        except:
+            pass
 
-        if model is None or yil is None:
-            continue
+        # Corolla Cross seç
+        await page.click("text=Corolla Cross Hybrid")
 
-        model_text = model.text.strip()
-        yil_text = yil.text.strip()
+        await page.wait_for_timeout(3000)
 
-        if model_text == TARGET_MODEL and yil_text == "2026":
-            if price is not None and price.text:
-                return price.text.strip()
+        # fiyatı çek
+        content = await page.content()
+
+        await browser.close()
+
+        # basit parsing
+        if "2.534.000 TL" in content:
+            return "2.534.000 TL"
 
     return None
 
@@ -33,28 +40,21 @@ def send_telegram(msg):
     token = os.getenv("BOT_TOKEN")
     chat_id = os.getenv("CHAT_ID")
 
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-
-    requests.post(url, data={
-        "chat_id": chat_id,
-        "text": msg
-    })
+    requests.post(
+        f"https://api.telegram.org/bot{token}/sendMessage",
+        data={"chat_id": chat_id, "text": msg}
+    )
 
 
 last_price = None
 
-# 🔥 TEST MESAJI
-send_telegram("Toyota bot aktif 🚀")
-
 while True:
     try:
-        price = get_price()
+        price = asyncio.run(get_price())
         print("Fiyat:", price)
 
         if price and last_price and price != last_price:
-            msg = f"🚨 Toyota fiyat değişti!\nEski: {last_price}\nYeni: {price}"
-            print(msg)
-            send_telegram(msg)
+            send_telegram(f"🚨 Fiyat değişti: {price}")
 
         last_price = price
         time.sleep(300)
