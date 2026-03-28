@@ -4,8 +4,6 @@ import time
 
 URL = "https://turkiye.toyota.com.tr/middle/fiyat-listesi/fiyat_v3.xml"
 
-TARGET_MODEL = "1.8 Hybrid Flame X-Pack e-CVT"
-
 def get_price():
     response = requests.get(URL)
     root = ET.fromstring(response.content)
@@ -13,13 +11,17 @@ def get_price():
     for item in root.findall(".//ModelFiyat"):
         model = item.find("Model")
         yil = item.find("ModelYili")
+        price = item.find("KampanyaliFiyati2")
 
-        if model is not None and yil is not None:
-            if model.text.strip() == TARGET_MODEL and yil.text == "2026":
+        if model is not None and yil is not None and price is not None:
 
-                kampanya = item.find("KampanyaliFiyati2")
-                if kampanya is not None and kampanya.text:
-                    return f"{model.text} → {kampanya.text}"
+            model_text = model.text.strip()
+
+            # 🔥 ESNEK ARAMA
+            if "Hybrid Flame" in model_text and yil.text == "2026":
+
+                if price.text:
+                    return f"{model_text} → {price.text}"
 
     return None
 
