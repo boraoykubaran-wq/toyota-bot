@@ -1,57 +1,68 @@
 import requests
 import xml.etree.ElementTree as ET
 import time
+import os
 
+# 🔑 TELEGRAM BİLGİLERİN
+TOKEN = "8768272603:AAFTYPyzQQGnCGR1CRMGw58tEN_nQc-9FSE"
+CHAT_ID = "8421945805"
 URL = "https://turkiye.toyota.com.tr/middle/fiyat-listesi/fiyat_v3.xml"
 
-def get_price():
+def send_telegram_msg(msg):
+    try:
+        url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+        data = {"chat_id": CHAT_ID, "text": msg}
+        requests.post(url, data=data)
+    except Exception as e:
+        print(f"Telegram hatası: {e}")
+
+def get_toyota_price():
     headers = {"User-Agent": "Mozilla/5.0"}
     try:
         response = requests.get(URL, headers=headers)
         response.encoding = 'utf-8'
         root = ET.fromstring(response.content)
 
-        print("\n--- [TARAMA BAŞLADI] ---")
-        
+        # XML içinde Corolla Cross Hybrid Flame'i arıyoruz
         for item in root.findall(".//ModelFiyat"):
             model = item.findtext("Model", "").strip()
             yil = item.findtext("ModelYili", "").strip()
-            # Kampanyalı fiyat (Ekran görüntüsündeki 2.534.000 TL genelde bu etikettedir)
             fiyat = item.findtext("KampanyaliFiyati2", "").strip()
 
-            # 🎯 AKILLI FİLTRE: 
-            # Hem "CROSS" hem "HYBRID" hem "FLAME" kelimeleri aynı satırda geçmeli
-            model_upper = model.upper()
-            if "CROSS" in model_upper and "FLAME" in model_upper and "HYBRID" in model_upper:
-                # 2026 model yılı kontrolü
-                if yil == "2026":
-                    if fiyat and fiyat != "0":
-                        print(f"✅ HEDEF BULUNDU: {model} -> {fiyat}")
-                        return f"{model} ({yil}) -> {fiyat}"
-
-        print("--- [EŞLEŞME BULUNAMADI - LOGLARI İNCELE] ---")
-        return None
-
+            # 🎯 NOKTA ATIŞI FİLTRE
+            m_up = model.upper()
+            if "CROSS" in m_up and "FLAME" in m_up and "HYBRID" in m_up and yil == "2026":
+                if fiyat and fiyat != "0":
+                    return f"{model} ({yil})", fiyat
+        return None, None
     except Exception as e:
-        print(f"Hata oluştu: {e}")
-        return None
+        print(f"Veri çekme hatası: {e}")
+        return None, None
 
-last_price = None
+# Başlangıçta botun çalıştığını sana haber verelim
+send_telegram_msg("⚓️ Kaptan, Corolla Cross Takip Botu Railway üzerinde yayına girdi!")
+
+last_saved_price = None
 
 while True:
-    price_info = get_price()
-    current_time = time.strftime("%H:%M:%S")
-    
-    if price_info:
-        print(f"[{current_time}] Güncel Fiyat: {price_info}")
-        
-        # Fiyat değişimi kontrolü
-        if last_price and price_info != last_price:
-            print("🚨 DİKKAT: FİYAT DEĞİŞTİ!")
-        
-        last_price = price_info
-    else:
-        print(f"[{current_time}] Aranan model henüz XML listesinde görülmedi.")
+    model_adi, current_price = get_toyota_price()
+    ts = time.strftime("%H:%M:%S")
 
-    # 5 dakikada bir kontrol (Railway için ideal süre)
-    time.sleep(300)
+    if current_price:
+        print(f"[{ts}] Model: {model_adi} | Fiyat: {current_price}")
+        
+        # Fiyat ilk kez çekiliyorsa veya değişmişse mesaj at
+        if last_saved_price is None:
+            last_saved_price = current_price
+            send_telegram_msg(f"✅ Takip Başladı!\n🚗 {model_adi}\n💰 Güncel Fiyat: {current_price}")
+        
+        elif current_price != last_saved_price:
+            msg = f"🚨 FİYAT DEĞİŞTİ!\n🚗 {model_adi}\n📉 Eski: {last_saved_price}\n📈 Yeni: {current_price}"
+            send_telegram_msg(msg)
+            last_saved_price = current_price
+    else:
+        print(f"[{ts}] Aranan model şu an listede bulunamadı.")
+
+    # 1 saatte bir kontrol et (Senin eski kodundaki gibi 3600 saniye)
+    # Test aşamasında 600 (10 dk) yapabilirsin.
+    time.sleep(3600)
