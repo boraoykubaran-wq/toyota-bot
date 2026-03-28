@@ -2,38 +2,51 @@ import requests
 import xml.etree.ElementTree as ET
 import time
 
+# Toyota Backend XML Linki
 URL = "https://turkiye.toyota.com.tr/middle/fiyat-listesi/fiyat_v3.xml"
 
 def get_price():
-    response = requests.get(URL)
+    headers = {"User-Agent": "Mozilla/5.0"}
+    response = requests.get(URL, headers=headers)
     root = ET.fromstring(response.content)
 
+    found_any = False
+    
     for item in root.findall(".//ModelFiyat"):
-        model = item.find("Model")
-        yil = item.find("ModelYili")
-        fiyat = item.find("KampanyaliFiyati2")
+        model = item.findtext("Model", "").strip()
+        yil = item.findtext("ModelYili", "").strip()
+        fiyat = item.findtext("KampanyaliFiyati2", "").strip()
 
-        if model is None or yil is None:
-            continue
+        # Debug: En azından Flame geçen modelleri logda görelim ki neyi yanlış arıyoruz anlayalım
+        if "Flame" in model:
+            found_any = True
+            # print(f"DEBUG: Bulunan -> {model} ({yil})") # Gerekirse açabilirsin
 
-        model_text = model.text.strip()
-        yil_text = yil.text.strip()
+        # HEDEF FİLTRE: "Hybrid", "Flame" ve "2026" (Veya 2025 ise ona göre güncelle)
+        if "Hybrid" in model and "Flame" in model and yil == "2026":
+            if fiyat and fiyat != "0": # Fiyat etiketi doluysa döndür
+                return f"{model} ({yil}) -> {fiyat}"
 
-        # 🎯 DOĞRU FİLTRE
-        if "Hybrid Flame X-Pack" in model_text and yil_text == "2026":
+    if not found_any:
+        return "Hata: Listede 'Flame' içeren hiçbir model bulunamadı."
+    
+    return "Filtreye uygun model bulundu ama fiyatı boş görünüyor."
 
-            if fiyat is not None and fiyat.text:
-                return f"{model_text} → {fiyat.text}"
-
-    return None
-
+last_price = None
 
 while True:
     try:
+        current_time = time.strftime("%H:%M:%S")
         price = get_price()
-        print("Bulunan fiyat:", price)
-        time.sleep(300)
+        print(f"[{current_time}] {price}")
+
+        if last_price and price != last_price and "->" in str(price):
+            print("🚨 FİYAT DEĞİŞTİ! (Alarm Çalıyor)")
+            # Buraya ilerde Telegram kodu gelecek
+
+        last_price = price
+        time.sleep(300) # 5 dakikada bir kontrol
 
     except Exception as e:
-        print("Hata:", e)
+        print(f"Hata oluştu: {e}")
         time.sleep(60)
