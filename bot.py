@@ -9,7 +9,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-# 🔑 BİLGİLERİN (Railway Variables'tan çekiyoruz)
+# 🔑 Değişkenleri Railway'den çekiyoruz
 TOKEN = os.getenv("BOT_TOKEN", "8768272603:AAFTYPyzQQGnCGR1CRMGw58tEN_nQc-9FSE")
 CHAT_ID = os.getenv("CHAT_ID", "8421945805")
 URL = "https://turkiye.toyota.com.tr/middle/fiyat-listesi/"
@@ -17,7 +17,7 @@ URL = "https://turkiye.toyota.com.tr/middle/fiyat-listesi/"
 def send_message(msg):
     try:
         url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-        requests.post(url, data={"chat_id": CHAT_ID, "text": msg}, timeout=10)
+        requests.post(url, data={"chat_id": CHAT_ID, "text": msg}, timeout=15)
     except:
         pass
 
@@ -43,7 +43,7 @@ def get_price():
         except:
             pass
 
-        # Corolla Cross Linkine Git
+        # Corolla Cross Linkini Bul ve Git
         links = driver.find_elements(By.TAG_NAME, "a")
         target_link = next((l.get_attribute("href") for l in links if l.get_attribute("href") and "corolla-cross" in l.get_attribute("href").lower()), None)
 
@@ -54,22 +54,37 @@ def get_price():
         driver.get(target_link)
         time.sleep(7)
 
-        # Fiyatı Ara
+        # Sayfa metnini al ve fiyatı ara
         body_text = driver.find_element(By.TAG_NAME, "body").text
         driver.quit()
         
         for line in body_text.split("\n"):
+            # Özellikle 2026 ve Flame kelimelerini içeren satırı bul
             if "Flame" in line and ("2.534" in line or "TL" in line):
                 return line
         return None
     except Exception as e:
-        print(f"Hata oluştu: {e}")
+        print(f"Hata: {e}")
         return None
 
 # --- 🔁 ANA DÖNGÜ ---
 
-# 1. Bildirim: Bot ilk açıldığında sadece BİR KEZ sessizce log basar, 
-# ama Telegram'a mesaj atmaz (mesaj kalabalığını önler).
-print("⚓️ Selenium Botu izlemeye başladı...")
+# Başlangıçta None yapıyoruz ki ilk açılışta o meşhur mesaj gelsin
+old_price = None
 
-# Mevcut fiyatı bildiğimiz için
+while True:
+    print(f"[{time.strftime('%H:%M:%S')}] Kontrol ediliyor...")
+    new_price = get_price()
+    
+    if new_price:
+        # İlk kez çalışıyorsa fiyatı raporla
+        if old_price is None:
+            send_message(f"✅ Takip Başladı!\n🚗 {new_price}")
+            old_price = new_price
+        # Fiyat değişmişse bildir
+        elif new_price != old_price:
+            send_message(f"🚨 FİYAT DEĞİŞTİ!\n📉 Eski: {old_price}\n📈 Yeni: {new_price}")
+            old_price = new_price
+    
+    # Yarım kalan parantez burada düzeltildi:
+    time.sleep(1800)
