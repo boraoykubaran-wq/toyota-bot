@@ -15,30 +15,25 @@ def send_telegram_msg(msg):
     except Exception as e:
         print(f"Telegram hatası: {e}")
 
-def get_toyota_price_brute():
+def get_toyota_price():
     headers = {"User-Agent": "Mozilla/5.0"}
     try:
         response = requests.get(URL, headers=headers)
         response.encoding = 'utf-8'
         root = ET.fromstring(response.content)
 
-        print("\n--- [XML TARAMASI BAŞLADI] ---")
-        
-        for item in root.iter('ModelFiyat'):
-            model = (item.findtext("Model") or "").strip()
-            yil = (item.findtext("ModelYili") or "").strip()
-            
-            # 🎯 HEDEF ARAÇ KONTROLÜ (Daha esnek)
-            m_up = model.upper()
-            if "CROSS" in m_up and "FLAME" in m_up:
-                # Olası tüm fiyat etiketlerini sırayla dene
-                for tag in ["KampanyaliFiyati2", "OTVTesvikli1", "KampanyaliFiyati1", "ListeFiyati"]:
-                    fiyat = (item.findtext(tag) or "").strip()
-                    if fiyat and fiyat != "0" and len(fiyat) > 5: # Geçerli bir fiyat formatı mı?
-                        print(f"✅ BULDUM! Model: {model} | Yıl: {yil} | Fiyat: {fiyat} ({tag})")
-                        return f"{model} ({yil})", fiyat
+        for item in root.findall(".//ModelFiyat"):
+            # XML Yapısına göre tam eşleme
+            govde = (item.findtext("Govde") or "").strip()   # COROLLA CROSS
+            model_tipi = (item.findtext("Model") or "").strip() # 1.8 Hybrid Flame e-CVT
+            yil = (item.findtext("ModelYili") or "").strip()    # 2026
+            fiyat = (item.findtext("KampanyaliFiyati2") or "").strip() # 2534000 TL
 
-        print("--- [EŞLEŞME YOK - FİLTREYE TAKILDI] ---")
+            # 🎯 FİLTRE: Govde "COROLLA CROSS" olacak ve Model içinde "Flame" geçecek
+            if "CROSS" in govde.upper() and "FLAME" in model_tipi.upper():
+                if yil == "2026" and fiyat:
+                    return f"{govde} {model_tipi} ({yil})", fiyat
+        
         return None, None
     except Exception as e:
         print(f"Hata: {e}")
@@ -47,17 +42,18 @@ def get_toyota_price_brute():
 last_saved_price = None
 
 while True:
-    model_adi, current_price = get_toyota_price_brute()
+    full_name, current_price = get_toyota_price()
     ts = time.strftime("%H:%M:%S")
 
     if current_price:
+        print(f"[{ts}] BAŞARILI: {full_name} -> {current_price}")
+        
         if last_saved_price is None or current_price != last_saved_price:
-            msg = f"✅ Fiyat Yakalandı!\n🚗 {model_adi}\n💰 Fiyat: {current_price} TL"
+            msg = f"✅ Fiyat Yakalandı!\n🚗 {full_name}\n💰 Kampanyalı: {current_price}"
             send_telegram_msg(msg)
             last_saved_price = current_price
-            print(f"[{ts}] Mesaj gönderildi: {current_price}")
     else:
-        print(f"[{ts}] Filtre uyuşmadı veya XML'de veri yok.")
+        print(f"[{ts}] Model XML içinde bulunamadı.")
 
-    # Railway'de logları görmek için 10 dakikada bir (600 saniye)
-    time.sleep(600)
+    # 1 saatte bir kontrol (3600 sn)
+    time.sleep(3600)
