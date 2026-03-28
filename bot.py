@@ -1,24 +1,20 @@
 import requests
-from bs4 import BeautifulSoup
+import xml.etree.ElementTree as ET
 import time
 
-URL = "https://turkiye.toyota.com.tr/middle/fiyat-listesi/"
-
-headers = {
-    "User-Agent": "Mozilla/5.0"
-}
+URL = "https://turkiye.toyota.com.tr/middle/fiyat-listesi/fiyat_v3.xml"
 
 def get_price():
-    response = requests.get(URL, headers=headers)
-    soup = BeautifulSoup(response.text, "html.parser")
+    response = requests.get(URL)
+    root = ET.fromstring(response.content)
 
-    text = soup.get_text()
+    for item in root.findall(".//ModelFiyat"):
+        model = item.find("Model")
+        price = item.find("KampanyaliFiyati2")
 
-    lines = text.split("\n")
-
-    for line in lines:
-        if "Corolla Cross Hybrid" in line and "Flame" in line:
-            return line.strip()
+        if model is not None and price is not None:
+            if "Flame" in model.text and "Hybrid" in model.text:
+                return f"{model.text} → {price.text}"
 
     return None
 
@@ -28,7 +24,7 @@ last_price = None
 while True:
     try:
         price = get_price()
-        print("Bulunan fiyat:", price)
+        print("Bulunan:", price)
 
         if last_price and price != last_price:
             print("🚨 FİYAT DEĞİŞTİ!")
