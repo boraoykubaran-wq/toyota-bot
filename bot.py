@@ -1,4 +1,3 @@
-from playwright.sync_api import sync_playwright
 import requests
 import time
 import json
@@ -12,25 +11,14 @@ URL = "https://www.toyota.com.tr/araba-modelleri/suv-araclar"
 
 def get_price():
     try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            page = browser.new_page()
+        r = requests.get(URL, headers={"User-Agent": "Mozilla/5.0"})
 
-            page.goto(URL, timeout=60000)
+        matches = re.findall(r"\d{1,3}(?:\.\d{3})+\s*TL", r.text)
 
-            # sayfanın yüklenmesini bekle
-            page.wait_for_timeout(5000)
+        print("FOUND:", matches)
 
-            content = page.content()
-
-            browser.close()
-
-            matches = re.findall(r"\d{1,3}(?:\.\d{3})+\s*TL", content)
-
-            print("FOUND:", matches)
-
-            if matches:
-                return matches[0].replace(".", "").replace(" TL", "")
+        if matches:
+            return matches[0].replace(".", "").replace(" TL", "")
 
     except Exception as e:
         print("HATA:", e)
@@ -39,13 +27,10 @@ def get_price():
 
 
 def send_telegram(msg):
-    try:
-        requests.post(
-            f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-            data={"chat_id": CHAT_ID, "text": msg}
-        )
-    except Exception as e:
-        print("Telegram hata:", e)
+    requests.post(
+        f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+        data={"chat_id": CHAT_ID, "text": msg}
+    )
 
 
 def load_price():
@@ -78,7 +63,7 @@ def main():
                 )
                 save_price(current)
 
-        time.sleep(300)  # 5 dakika
+        time.sleep(300)
 
 
 if __name__ == "__main__":
