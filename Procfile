@@ -1,1 +1,1 @@
-worker: playwright install chromium && python bot.py
+worker: playwright install chromium && playwright install-deps && python bot.py
