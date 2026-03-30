@@ -1,19 +1,13 @@
 def get_price():
-    try:
-        r = requests.get(URL, headers={"User-Agent": "Mozilla/5.0"})
-        soup = BeautifulSoup(r.text, "html.parser")
+    r = requests.get("https://www.toyota.com.tr/araba-modelleri/suv-araclar",
+                     headers={"User-Agent": "Mozilla/5.0"})
+    
+    import re
+    matches = re.findall(r"\d{1,3}(?:\.\d{3})+\s*TL", r.text)
 
-        import re
+    print("FOUND:", matches)
 
-        # Tüm TL fiyatlarını bul
-        matches = re.findall(r"(\d{1,3}(?:\.\d{3})+)\s*TL", soup.get_text())
-
-        if matches:
-            # genelde ilk fiyat başlangıç fiyatıdır
-            price = matches[0]
-            return price.replace(".", "")
-
-    except Exception as e:
-        print("HATA:", e)
+    if matches:
+        return matches[0].replace(".", "").replace(" TL", "")
 
     return None
